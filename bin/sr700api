@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+""" a command-line python script that starts up a local REST
+    server to communicate with a
+    FreshRoast SR700 coffe roaster, and
+    fetch temperature data from a connected Bus Pirate connected
+    to a MAX31855K chip via SPI. """
+"""
+MIT License
+
+Copyright (c) 2017 int3ll3ct.ly@gmail.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+# import logging
+# logging.basicConfig(filename='busprtspitemp-get.log',level=logging.DEBUG)
+import sys
+import time
+import subprocess
+import requests
+from argparse import Namespace
+
+# pyBusPirateLite needs python3, not sure how Artisan launches this script
+# though.
+if sys.version_info[0] < 3:
+    # for artisan, we'll send improbable temps as error codes...
+    print("1.0")
+    raise Exception("Python 3 or a more recent version is required.")
+
+
+def instantiate_rest_api_server(unused=None):
+    """creates a flask_restful server in its own process, created to
+       outlive this cli instance.  If one exists, it will re-start it.
+    """
+
+    # check if already running
+    if check_rest_server_is_active():
+        # we'll quit this one and start anew...
+        shutdown_rest_api_server()
+        time.sleep(0.5)
+
+    # instantiate the server.
+    retval = False
+    try:
+        args = [
+            sys.executable,
+            '-m', 'sr700api.restserver',
+            'start_server',
+            ]
+        subprocess.Popen(
+            args,
+            bufsize=-1  # system default
+            # stdout=fd, TODO - create/open a file to direct stdout
+            # stderr=fd, TODO - create/open a file to direct stderr
+            )
+        time.sleep(0.5)
+    except OSError:
+        # logging.error(
+        #     'instantiate_rest_api_server: '
+        #     'subprocess.Popen failed with OsError.')
+        return False
+    except ValueError:
+        # logging.error(
+        #     'instantiate_rest_api_server: '
+        #     'subprocess.Popen failed with ValueError.')
+        return False
+    # OK Popen() succeeded, check for server presence.
+    for i in range(10):
+        try:
+            r = requests.get('http://127.0.0.1:58700/')
+            retval = True
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(0.1)
+    if not retval:
+        # logging.error(
+        #     'instantiate_rest_api_server: ' +
+        #     'failed to instantiate rest api server. Cannot start.'
+        #     )
+        pass
+    return retval
+
+
+def shutdown_rest_api_server(unused=None):
+    """ send the magic code to shut down the server."""
+    # logging.info("get_temp - sending SHUTDOWN msg to REST server.")
+    r = requests.post(
+            "http://127.0.0.1:58700/server_shutdown",
+            data = {'server_shutdown': 'sr700api'}
+            )
+
+
+def check_rest_server_is_active(start_it=False):
+    """ check if local REST server is active, and startit if it isn't. """
+    try:
+        r = requests.get('http://127.0.0.1:58700/')
+        # if we don't time out, it's because server is present...
+        # we won't check HTML status code here, good enough
+        return True
+    except requests.exceptions.ConnectionError:
+        # the REST server is NOT active
+        if not start_it:
+            return False
+        # start_it is True, so
+        # launch the server in a separate process, wait, and query then
+        return instantiate_rest_api_server()
+
+
+def get_func(args):
+    """Get parameter from device via REST server."""
+    if not check_rest_server_is_active(start_it=True):
+        return "ERR: can't connect to REST server."
+
+    r = requests.get('http://127.0.0.1:58700/' + args.parameter)
+    if r.status_code is 200:
+        # for temperatures, fields will be appended with _c and _f
+        # return the correct one, default to degF
+        if args.parameter in r.json().keys():
+            return r.json()[args.parameter]
+        if args.c and args.parameter + '_c' in r.json().keys():
+            return r.json()[args.parameter + '_c']
+        if args.parameter + '_f' in r.json().keys():
+            return r.json()[args.parameter + '_f']
+    # if we're here, there was an error...
+    return 'ERR: ' + str(r.status_code) + str(r.json())
+
+
+def get_multi_func(args):
+    """Get parameters from device via REST server."""
+    if not check_rest_server_is_active(start_it=True):
+        return "ERR: can't connect to REST server."
+    return_string = '.'
+    for param in args.parameters:
+        r = requests.get('http://127.0.0.1:58700/' + param)
+        if r.status_code is 200:
+            # for temperatures, fields will be appended with _c and _f
+            # return the correct one, default to degF
+            if return_string != '.':
+                return_string += ','
+            else:
+                return_string = ''
+            if param in r.json().keys():
+                return_string += str(r.json()[param])
+            elif args.c and param + '_c' in r.json().keys():
+                return_string += str(r.json()[param + '_c'])
+            elif param + '_f' in r.json().keys():
+                return_string += str(r.json()[param + '_f'])
+            else:
+                # if we're here, there was an error...
+                # we won't signal it to the caller
+                return_string += '0'
+    return return_string
+
+
+def put_func(args):
+    """Set parameter on device via REST server."""
+    if not check_rest_server_is_active(start_it=True):
+        return "ERR: can't connect to REST server."
+    if args.f:
+        param_str = args.parameter + '_f'
+    elif args.c:
+        param_str = args.parameter + '_c'
+    else:
+        # default to degF for temperature values,
+        # big assumption - all temp keys have the
+        # substring '_temp' in them, and no others do!
+        if '_temp' in args.parameter:
+            param_str = args.parameter + '_f'
+        else:
+            param_str = args.parameter
+    # make the put request
+    r = requests.put('http://127.0.0.1:58700/' + args.parameter,
+                     data={param_str: args.value})
+    if r.status_code is 200:
+        return r.json()[param_str]
+    # if we're here, there was an error...
+    return 'ERR: ' + str(r.status_code) + str(r.json())
+
+
+
+def pairwise(iterable):
+    "s -> (s0, s1), (s2, s3), (s4, s5), ..."
+    a = iter(iterable)
+    return zip(a, a)
+
+
+def put_multi_func(args):
+    """Get parameters from device via REST server."""
+    if not check_rest_server_is_active(start_it=True):
+        return "ERR: can't connect to REST server."
+    return_string = '.'
+    for param, val in pairwise(args.parameters):
+        args4put = Namespace(c=args.c,
+                             f=args.f,
+                             parameter=param,
+                             value=val)
+        retval = put_func(args4put)
+        # for temperatures, fields will be appended with _c and _f
+        # return the correct one, default to degF
+        if return_string != '.':
+            return_string += ','
+        else:
+            return_string = ''
+        return_string += str(retval)
+    return return_string
+
+
+if __name__ == "__main__":
+
+    """ cli in a nutshell:
+    sr700api startup
+        launch REST server
+    sr700api shutdown
+        shutdown REST server
+    sr700api get [param]
+        get the current value of a parameter
+    sr700api set [param]
+        set a new value for a parameter
+    sr700api get_multi [param1] [param2]...[param6]
+        specify up to six parameters to return as
+        value1,value2,...,value6
+    """
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(help='supported actions')
+
+    # create the parser for the startup action
+    parser_startup = subparsers.add_parser(
+        'startup',
+        help='start up the REST server.')
+    parser_startup.set_defaults(func=instantiate_rest_api_server)
+
+    # create the parser for the shutdown action
+    parser_shutdown = subparsers.add_parser(
+        'shutdown',
+        help='shut down the REST server.')
+    parser_shutdown.set_defaults(func=shutdown_rest_api_server)
+
+    # create the parser for the get action
+    parser_get = subparsers.add_parser(
+        'get',
+        help='get a parameter. Type \'sr700 api get -h\' for details.')
+    parser_get.add_argument(
+        'parameter',
+        help='the parameter to fetch. Supported parameters include '
+            'fan_speed, bean_temp (probe), heat_level, '
+            'target_temp (chamber), current_temp (chamber), '
+            'state, time_remaining.')
+    parser_get.add_argument("--c", help="report in degrees Celsius",
+                        action="store_true")
+    parser_get.add_argument("--f", help="report in degrees Fahrenheit",
+                        action="store_true")
+    parser_get.set_defaults(func=get_func)
+
+    # create the parser for the set action
+    parser_set = subparsers.add_parser(
+        'set',
+        help='set a parameter. Type \'sr700 api set -h\' for details.')
+    parser_set.add_argument(
+        'parameter',
+        help='the parameter to write. Supported parameters include '
+            'fan_speed, heater_level, '
+            'state, time_remaining.')
+    parser_set.add_argument(
+        'value',
+        help='the parameter value to write. Supported values depend '
+             'on parameter: '
+             'fan_speed: 1 to 9, '
+             'heater_level: 0 to 8,'
+             'time_remaining: 0 to 599 seconds, '
+             'state: idle, roasting, cooling, sleeping.')
+    parser_set.add_argument("--c", help="report in degrees Celsius",
+                        action="store_true")
+    parser_set.add_argument("--f", help="report in degrees Fahrenheit",
+                        action="store_true")
+    parser_set.set_defaults(func=put_func)
+
+    # create the parser for the get_multi action
+    parser_get_multi = subparsers.add_parser(
+        'get_multi',
+        help='get several parameters. Type \'sr700 api get_multi -h\' for details.')
+    parser_get_multi.add_argument(
+        'parameters',
+        nargs="+",
+        help='the parameters to fetch. Supported values include '
+            'fan_speed, bean_temp (probe), heater_level, '
+            'current_temp (chamber), '
+            'time_remaining, state.')
+    parser_get_multi.add_argument("--c", help="report in degrees Celsius",
+                        action="store_true")
+    parser_get_multi.add_argument("--f", help="report in degrees Fahrenheit",
+                        action="store_true")
+    parser_get_multi.set_defaults(func=get_multi_func)
+
+    # create the parser for the put_multi action
+    parser_set_multi = subparsers.add_parser(
+        'set_multi',
+        help='set several parameters. Type \'sr700 api set_multi -h\' for details.')
+    parser_set_multi.add_argument(
+        'parameters',
+        nargs="+",
+        help='the parameters to fetch, as param value pairs.'
+            'Supported values include '
+            'fan_speed, '
+            'heater_level, '
+            'time_remaining, state. See help for the set command for '
+            'value range details. '
+            'Usage example: \'sr700api set_multi fan_speed 7 heater_level 8\'.')
+    parser_set_multi.add_argument("--c", help="report in degrees Celsius",
+                        action="store_true")
+    parser_set_multi.add_argument("--f", help="report in degrees Fahrenheit",
+                        action="store_true")
+    parser_set_multi.set_defaults(func=put_multi_func)
+
+    # parse the command-line arguments
+    args = parser.parse_args()
+    # for artisan, need to print the result out
+    print(args.func(args))
+
