@@ -11,7 +11,7 @@ This software and hardware approach to using the SR700 implies a certain level o
 
 ## Requirements
 
-* Artisan 1.1.0 installed on a Lniux system (the author used Ubuntu 16.04) 
+* Artisan 1.1.0 installed on a Lniux system (the author used Ubuntu 16.04)
 * python 3, because the
 * pyBusPirateLite python package works with python 3
 * a number of other python packages, as listed in `requirements.txt`
@@ -39,7 +39,7 @@ True
 >sr700api shutdown
 ```
 In other words,
- 
+
 * you start a session with `sr700api startup`. This launches a local REST server (think of it as a service or daemon), which immediately sets up a connection both with the SR700 and the bean probe electronics.  It returns `True` when it has successfully connected to that equipment.  The SR700 requires constant communication with the computer, so the REST server creates the proper context to let that happen.
 * There are currently four verbs you can use with the script after startup: `get`, `get_multi`, `set`, and `set_multi`. The GETs return data in a format most useful for ingestion into the Artisan application.  The SETs allow control of the hardware from the Artisan application.
 * Once you're done with a roasting session, `sr700api shutdown` disconnects from hardware and shuts down the local REST server.
@@ -48,7 +48,7 @@ In other words,
 ## Usage in Artisan 1.1.0 - Ubuntu 16.04
 
 * You will need to open a Terminal window.  We will use this Terminal to start and stop the sr700api service. (For some reason, Artisan itself, when invoking sr700api, cannot cause the launching of new processes... to be worked out someday!).
-* Invoke `sr700api startup` in a terminal window to start the REST server. 
+* Invoke `sr700api startup` in a terminal window to start the REST server.
 * Launch Artisan, assuming it is configured to control the SR700 device (see details in following section).
 * Once you're done with Artisan, you can manually shut down the REST server by invoking`sr700api shutdown` in the terminal window.
 
@@ -57,8 +57,8 @@ In other words,
 ### Getting the Materials
 
 * This software was designed for a particular hot-rodded SR700 setup - namely, the addition of a bean temperature probe to the unit.
-* This setup requires some soldering skills, as one of the electronics boards has no connector headers on it. 
-* This setup requires some hardware hacking skills, as you need to very slightly modify the SR700 chaff collector to run the thermocouple wire through, as well as bend the thermocouple to the proper shape. 
+* This setup requires some soldering skills, as one of the electronics boards has no connector headers on it.
+* This setup requires some hardware hacking skills, as you need to very slightly modify the SR700 chaff collector to run the thermocouple wire through, as well as bend the thermocouple to the proper shape.
 * Hardware shopping list:
 
 | Qty | Item | Seller | Part Num | Where to Find |
@@ -102,7 +102,7 @@ This is not a how-to on soldering techniques - this is just a summary list of th
 
 * Install Artisan 1.1.0 or later from [https://github.com/artisan-roaster-scope/artisan](https://github.com/artisan-roaster-scope/artisan).
 
-* Artisan is a very flexible, powerful piece of software that consequently has a number of setup details that you must get right in order to use this software successfully. 
+* Artisan is a very flexible, powerful piece of software that consequently has a number of setup details that you must get right in order to use this software successfully.
     * It is important to note that it is possible to setup Artisan very differently from what is suggested here, and successfully use sr700api to control the SR700.  What follows is my preferred setup.
 
 * Here's a summary of the configuration that I use in Artisan. Familiarity with Artisan is assumed.
@@ -132,7 +132,7 @@ This is not a how-to on soldering techniques - this is just a summary list of th
     * The Fan and HtrLvl Events must be checked, and the other 2 unchecked.
     * The Action for Fan must be `Call Program` and the Command script is `sr700api set fan_speed {}`. Note also the Offset, Factor, Min and Max values - they must be set as shown.
     * The Action for HtrLvl must be `Call Program` and the Command script is `sr700api set heater_level {}`. Note also the Offset, Factor, Min and Max values - they must be set as shown.  This is critically important here, as the PID controller is set up to write values from 0 to 100 and these scaling factors map those numbers to heater_level 0 through 8.
-    
+
 * Setting up Artisan to read data from the hardware.
     * In the Config menu, select Device. The Device dialog appears. The ET/BT tab is set up as shown below.
     ![Artisan Device ET/BT screenshot](images/Artisan-Device-ETBT.png  "Artisan Device ET/BT Tab")
@@ -148,7 +148,7 @@ This is not a how-to on soldering techniques - this is just a summary list of th
     * At this point, you should see a Control button near the top right corner of the Artisan application. Press it, and you'll be presented with the PID Control dialog, as shown below.
     ![Artisan Control PID Control Dialog](images/Artisan-Control-PIDControl.png  "Artisan Control PID Control Dialog")
     * The PID controller is not finely tuned, but the numbers shown here seem to work OK. Please copy in all the values shown in the screenshot above as-is into the PID Control dialog. If any value is off or incorrect, the PID Control will definitely NOT work.
-    
+
 ## Running a Roast with this setup
 
 At this point, setup is complete, and in theory, everything is ready to run. However, the Artisan setup is configured for the author's approach to roasting and using Artisan, which may not match your understanding or use of Artisan. So I will run you through how I use this setup.
@@ -171,11 +171,11 @@ At this point, setup is complete, and in theory, everything is ready to run. How
 * Close Artisan.
 * In the Terminal window we started in the first step, I type `sr700api shutdown` to terminate the hardware connections and the service.
 
-##License
+## License
 
 Distributed under MIT License, see LICENSE.txt.
 
 ## Version History
 
-###v0.1.3
+### v0.1.3
 First complete draft of this package. README needs more work, in terms of how-to visuals.
