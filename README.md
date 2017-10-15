@@ -155,8 +155,8 @@ At this point, setup is complete, and in theory, everything is ready to run. How
 
 * Launch a Terminal window. Type `sr700api startup` to start the sr700api service.
 * Launch Artisan.
-* Load a background profile. I design my profiles using Artisan's profile designer, under Tools.
-    * IMPORTANT - the setup described above needs a background profile loaded to drive the roast. The PID controller is set up to track a roast profile. (It can instead be set up to follow ramp/soak profiles, like Openroast does, but I don't explain that here.)
+* Load a background profile. I design my profiles using Artisan's profile designer, under Tools->Designer.
+    * IMPORTANT - the setup described above needs a background profile loaded to drive the roast. Go to Roast->Background to load the background profile. The PID controller is set up to track a background roast profile. (It can instead be set up to follow ramp/soak profiles, like Openroast does, but I don't explain that here.)
 * Press the ON button.  The display changes a little, two sliders appear on the left side, `fan` and `HtrLvl`.  You can control both these sliders. However, the PID controller controls the HtrLvl slider during the roast, you'll see it move up and down as it tries to drive the bean temperature to match the background profile.
 * Press the START button. Now the roaster comes to life, and the fan and heater activate on the roaster.
 * I wait a while for the roast chamber to heat up, typically until the bean probe reaches about 300F, sometimes I have to play with the HtrLvl slider to achieve this.
